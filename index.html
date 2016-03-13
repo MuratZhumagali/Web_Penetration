@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>The Forecast Search Web Page (Homework #8)</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+        <link rel="icon" href="favicon.ico" type="image/x-icon">
+        <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+        <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+        <link rel="stylesheet" href="css/map-style.css">
+        <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+        <script type="text/javascript" src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+        <script type="text/javascript" src="http://ajax.aspnetcdn.com/ajax/jquery.validate/1.13.0/jquery.validate.min.js"></script>
+        <script type="text/javascript" src="http://openlayers.org/api/OpenLayers.js"></script>
+        <script type="text/javascript" src="http://openweathermap.org/js/OWM.OpenLayers.1.3.8.js"></script>
+        <script type="text/javascript">
+            function clearForm() {
+                document.forms["searchForm"]["street_address"].value = "";
+                document.forms["searchForm"]["city_name"].value = "";
+                document.getElementById("state_Select").selectedIndex = 0;
+                document.getElementById("farRadioBtn").checked = true;
+                $("#tabContentHrly").empty();
+                $("#tabContainer").hide();
+                document.forms["searchForm"]["street_address"].focus();
+            }
+
+            function processForm() {
+                    $.ajax({
+                        url: "process.php",
+                        type: "GET",
+                        cache: false,
+                        dataType: "json",
+                        data: {
+                            street_address: document.forms["searchForm"]["street_address"].value,
+                            city_name: document.forms["searchForm"]["city_name"].value,
+                            state_name: $("#state_Select").val(),
+                            measurement: $("input[name=measurement]:checked", "#searchForm").val()
+                        },
+                        success: function(response){
+                            processResponse(response);
+                        },
+                        error: function(xhr){
+                            alert("An error occured: with status code - " + xhr.status + " (" + xhr.statusText + ")");
+                        }
+                    });
+            }
+
+            function processResponse(jsonObj) {
+                var img = $("<img />", {
+                    src: "forecast-images/" + jsonObj.currently.icon + ".png",
+                    alt: jsonObj.currently.summary, title: jsonObj.currently.summary,
+                    height: 150, width: 150
+                });
+                $("#iconNw").empty();
+                img.appendTo($("#iconNw"));
+                $("#summaryNw").html("<b>" + jsonObj.currently.summary + " in " + document.forms["searchForm"]["city_name"].value + ", " + $("#state_Select").val() + "</b>");
+                var measurement = $("input[name=measurement]:checked", "#searchForm").val();
+                var degreeUnit = "";
+                var visibUnit = "";
+                var windUnit = "";
+                var pressUnit = "";
+                var offset = jsonObj.offset;
+                if (measurement == "us"){
+                    degreeUnit = "&#8457";
+                    visibUnit = " mi";
+                    windUnit = " mph";
+                    pressUnit = "mb";
+                } else {
+                    degreeUnit = "&#8451";
+                    visibUnit = " km";
+                    windUnit = " m/s";
+                    pressUnit = "hPa";
+                }
+                $("#tempNw").html("<H1><span>" + Math.round(jsonObj.currently.temperature) + "</span><sup>" + degreeUnit + "</sup>" + "</H1>");
+                $("#lhTempNw").html("<span id='blue_text'>L: " + Math.round(jsonObj.daily.data[0].temperatureMin) + degreeUnit + "</span>" + " | " + "<span id='green_text'>H: " + Math.round(jsonObj.daily.data[0].temperatureMax) + degreeUnit + "</span>");
+                var precipitation = 0;
+                var precipIntensity = "";
+                if (measurement == 'us') {
+                    precipitation = jsonObj.currently.precipIntensity;
+                } else if (measurement == 'si') {
+                    precipitation = jsonObj.currently.precipIntensity / 25.4;
+                }
+                if (precipitation >= 0 || precipitation < 0.002) {
+                    precipIntensity = "None";
+                } else if (precipitation >= 0.002 || precipitation < 0.017) {
+                    precipIntensity = "Very Light";
+                } else if (precipitation >= 0.017 || precipitation < 0.1) {
+                    precipIntensity = "Light";
+                } else if (precipitation >= 0.1 || precipitation < 0.4) {
+                    precipIntensity = "Moderate";
+                } else if (precipitation >= 0.4) {
+                    precipIntensity = "Heavy";
+                }
+                $("#windSpeed").text(parseFloat(jsonObj.currently.windSpeed).toFixed(2) + windUnit);
+                $("#visibility").text(parseFloat(jsonObj.currently.visibility).toFixed(2) + visibUnit);
+                $("#precipIntensity").text(precipIntensity);
+                $("#precipProbability").text(Math.round(jsonObj.currently.precipProbability * 100) + "%");
+                $("#dewPoint").html(jsonObj.currently.dewPoint + degreeUnit);
+                $("#humidity").text(Math.round(jsonObj.currently.humidity * 100) + "%");
+                $("#sunriseTime").text(convertTimestamp(jsonObj.daily.data[0].sunriseTime, offset));
+                $("#sunsetTime").text(convertTimestamp(jsonObj.daily.data[0].sunsetTime, offset));
+                $("#tabContentHrly").empty();
+                $("#tempMeasure").html("Temp (" + degreeUnit + ")");
+                for (var i=0; i<24; i++) {
+                    $("#tabContentHrly").append("<table class='table table-responsive'><tr><td>" + convertTimestamp(jsonObj.hourly.data[i].time, offset) + "</td><td><img src='forecast-images/" + jsonObj.hourly.data[i].icon + ".png" + "' alt='" + jsonObj.hourly.data[i].summary + "' title='" + jsonObj.hourly.data[i].summary + "' height='50' width='50'></td><td>" + Math.round(jsonObj.hourly.data[i].cloudCover * 100) + "%" + "</td><td>" + parseFloat(jsonObj.hourly.data[i].temperature).toFixed(2) + "</td><td><a class='glyphHover' data-toggle='collapse' data-target='#collapseElem" + i + "'><span class='glyphicon glyphicon-plus'></span></a></td></tr></table><div id='collapseElem" + i + "' class='collapseTable collapse'><div class='panel panel-default'><div class='panel-heading'><div class='table-responsive'><table class='table'><thead><tr><th> Wind </th><th> Humidity </th><th> Visibility </th><th> Pressure </th></tr></thead><tbody><tr><td>" + parseFloat(jsonObj.hourly.data[i].windSpeed).toFixed(2) + windUnit + "</td><td>" + Math.round(jsonObj.hourly.data[i].humidity * 100) + "%" + "</td><td>" + parseFloat(jsonObj.hourly.data[i].visibility).toFixed(2) + visibUnit + "</td><td>" + jsonObj.hourly.data[i].pressure + pressUnit + "</td></tr></tbody></table></div></div></div></div>");
+                }
+                for (var k=1; k<=7; k++) {
+                    var weekday = getWeekDay(jsonObj.daily.data[k].time, offset),
+                        monthdate = getMonthDate(jsonObj.daily.data[k].time, offset),
+                        weatherSummary = jsonObj.daily.data[k].summary,
+                        visibility = "",
+                        humidity = "",
+                        windSpeed = "",
+                        pressure = "";
+                    if (jsonObj.daily.data[k].visibility == null || jsonObj.daily.data[k].visibility === null) {
+                        visibility = "N.A.";
+                    } else {
+                        visibility = parseFloat(jsonObj.daily.data[k].visibility).toFixed(2) + visibUnit;
+                    }
+                    if (jsonObj.daily.data[k].humidity == null || jsonObj.daily.data[k].humidity === null) {
+                        humidity = "N.A.";
+                    } else {
+                        humidity = Math.round(jsonObj.daily.data[k].humidity * 100) + "%";
+                    }
+                    if (jsonObj.daily.data[k].windSpeed == null || jsonObj.daily.data[k].windSpeed === null) {
+                        windSpeed = "N.A.";
+                    } else {
+                        windSpeed = parseFloat(jsonObj.daily.data[k].windSpeed).toFixed(2) + windUnit;
+                    }
+                    if (jsonObj.daily.data[k].pressure == null || jsonObj.daily.data[k].pressure === null) {
+                        pressure = "N.A.";
+                    } else {
+                        pressure = parseFloat(jsonObj.daily.data[k].pressure).toFixed(2) + pressUnit;
+                    }
+                    $("#weekDay_" + k).html("<div><b>" + weekday + "</b></div><br><div><b>" + monthdate + "</b></div><br><div><img src='forecast-images/" + jsonObj.daily.data[k].icon + ".png" + "' alt='" + weatherSummary + "' title='" + weatherSummary + "' height='65' width='65'></div><div>Min<br>Temp<br><H1>" + Math.round(jsonObj.daily.data[k].temperatureMin) + "&#176;" + "</H1></div><div>Max<br>Temp<br><H1>" + Math.round(jsonObj.daily.data[k].temperatureMax) + "&#176;" + "</H1></div>");
+                    $("#forecastModalLabel_" + k).html("Weather in " + document.forms["searchForm"]["city_name"].value + " on " + monthdate);
+                    $("#modalBody_" + k).html("<img src='forecast-images/" + jsonObj.daily.data[k].icon + ".png" + "' alt='" + weatherSummary + "' title='" + weatherSummary + "' height='150' width='150'><H3>" + weekday + ": <span style='color:#FFA500'>" + weatherSummary + "</span></H3><div class='row'><div class='col-sm-4'><H4>Sunrise Time</H4>" + convertTimestamp(jsonObj.daily.data[k].sunriseTime, offset) + "</div><div class='col-sm-4'><H4>Sunset Time</H4>" + convertTimestamp(jsonObj.daily.data[k].sunsetTime, offset) + "</div><div class='col-sm-4'><H4>Humidity</H4>" + humidity + "</div><div class='col-sm-4'><H4>Wind Speed</H4>" + windSpeed + "</div><div class='col-sm-4'><H4>Visibility</H4>" + visibility + "</div><div class='col-sm-4'><H4>Pressure</H4>" + pressure + "</div></div>");
+                }
+                loadMap(jsonObj.latitude, jsonObj.longitude);
+                $("#tabContainer").show();
+            }
+
+            function convertTimestamp(timestamp, offset) {
+                var t = new Date(timestamp * 1000),
+                    localOffset = t.getTimezoneOffset() * 60000,
+                    offset = offset * 3600000,
+                    time = new Date(Math.round(new Date(timestamp * 1000 + localOffset + offset).getTime())),
+                    hh = time.getHours(),
+                    h = hh,
+                    min = ("0" + time.getMinutes()).slice(-2),
+                    meridiem = "AM";
+                if (hh > 12) {
+                    h = hh - 12;
+                    meridiem = "PM";
+                } else if (hh === 12) {
+                    h = 12;
+                    meridiem = "PM";
+                } else if (hh == 0) {
+                    h = 12;
+                }
+                return h + ":" + min + " " + meridiem;
+            }
+
+            function getWeekDay(timestamp, offset){
+                var date = new Date(timestamp * 1000),
+                    localOffset = date.getTimezoneOffset() * 60000,
+                    offset = offset * 3600000,
+                    d = new Date(Math.round(new Date(timestamp * 1000 + localOffset + offset).getTime()));
+                var weekday = new Array(7);
+                weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                return weekdays[d.getDay()];
+            }
+
+            function getMonthDate(timestamp, offset){
+                var d = new Date(timestamp * 1000),
+                    localOffset = d.getTimezoneOffset() * 60000,
+                    offset = offset * 3600000,
+                    date = new Date(Math.round(new Date(timestamp * 1000 + localOffset + offset).getTime()));
+                var months = new Array(12);
+                months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                return months[date.getMonth()] + " " + date.getDate();
+            }
+
+            function loadMap(lat, lon) {
+                var center = new OpenLayers.LonLat(lon, lat);
+                center.transform(
+                    new OpenLayers.Projection("EPSG:4326"),
+                    new OpenLayers.Projection("EPSG:900913")
+                );
+                map.setCenter(center, 10);
+            }
+        </script>
+        <style type="text/css">
+            html, body {
+                background: url(images/bg.jpg) no-repeat center center fixed;
+                width: auto;
+                -webkit-background-size: cover;
+                -moz-background-size: cover;
+                background-size: cover;
+                min-width: 364px;
+            }
+
+            body {
+                margin: 0 auto;
+            }
+
+            #inputform {
+                float: left;
+                margin: 5px;
+                color: #FFFFFF;
+                text-shadow: 0px 1px 2px rgba(0,0,0,0.25);
+                position: relative;
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid transparent;
+                box-shadow: 0px -3px 1px 1px rgba(0, 0, 0, 0.15);
+                border-radius: 4px;
+                -webkit-border-radius: 4px;
+            }
+
+            #inputform:before {
+                content: '';
+                position: absolute;
+                z-index: -1;
+                height: 100%;
+                top: 0; right: 0; left: 0;
+                filter: blur(5px);
+                -webkit-filter: blur(5px);
+                -moz-filter: blur(5px);
+            }
+
+            #buttonGroup {
+                float: right;
+            }
+
+            #disclaimer {
+                text-align: right;
+            }
+
+            .labelAsterisk {
+                color: #FF0000;
+            }
+
+            .row {
+                margin-left: 0;
+                margin-right: 0;
+            }
+
+            #tableNowContainer, #mapContainer, #forecastHrly {
+                padding: 0;
+            }
+
+            .nav-tabs > li > a,
+            .nav-tabs > li > a:focus,
+            .nav-tabs > li > a:hover {
+                background-color: #F8F8F8;
+                color:#3071A9;
+            }
+
+            .nav-tabs > li.active > a,
+            .nav-tabs > li.active > a:focus,
+            .nav-tabs > li.active > a:hover {
+                background-color: #3071A9;
+                color: #F8F8F8;
+            }
+
+            #iconNw, #detailNw {
+                height: 180px;
+                margin: 0 auto;
+                text-align: center;
+                vertical-align: middle;
+                color: #F8F8F8;
+                background-color: #F08080;
+                display: table-cell;
+            }
+            #sqlusername{
+                margin-bottom: 15px;
+                margin-above: 10px;
+            }
+            #sqlpassword{
+                margin-left: 4px;
+            }
+
+            #green_text {
+                color: #009900;
+            }
+
+            #blue_text {
+                color: #0033FF;
+            }
+
+            #tempNw H1 {
+                font-size: 72px;
+                display: inline-block;
+            }
+
+            #iconNw img {
+                position: absolute;
+                margin: auto;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+            }
+
+            #tempNw H1 sup {
+                vertical-align: super;
+                font-size: 20px;
+            }
+
+            #fb_icon {
+                position: absolute;
+                bottom: 10px;
+                right: 10px;
+            }
+
+            #lhTempNw {
+                font-size: 16px;
+                padding: 10px 10px 10px 10px;
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+            }
+
+            #forecastHrly {
+                background-color: #FFFFFF;
+                margin-bottom: 15px;
+            }
+
+            #forecastDyly {
+                background-color:  #2E3337;
+            }
+
+            #tabHeaderHrly {
+                width: 100%;
+                text-align: center;
+                background-color: #3071A9;
+                color: #F8F8F8;
+            }
+
+            #headerHrly th, #tabContentHrly table tr td {
+                text-align: center;
+                width: 20%;
+            }
+
+            .collapseTable table {
+                width: 100%;
+                text-align: center;
+            }
+
+            .collapseTable table thead tr th {
+                text-align: center;
+                width: 25%;
+                background-color: #FFFFFF;
+            }
+
+            a.glyphHover, .weekdayDiv {
+                cursor: pointer;
+            }
+
+            .table-responsive {
+                margin-bottom: 0;
+            }
+
+            .weekdayDiv {
+                border-radius: 5px;
+                color: #FFFFFF;
+                height: 350px;
+                text-align: center;
+                padding-left: 5px;
+                padding-right: 5px;
+                margin-top: 10px;
+                margin-bottom: 10px;
+                margin-right: 10px;
+            }
+
+            .weekdayDiv H1 {
+                margin-top: 10px;
+                margin-bottom: 10px;
+            }
+
+            #weekDay_1 {
+                background-color: #3071A9;
+            }
+
+            #weekDay_2 {
+                background-color: #EC4444;
+            }
+
+            #weekDay_3 {
+                background-color: #E68E4F;
+            }
+
+            #weekDay_4 {
+                background-color: #A7A439;
+            }
+
+            #weekDay_5 {
+                background-color: #9770A7;
+            }
+
+            #weekDay_6 {
+                background-color: #F37C7E;
+            }
+
+            #weekDay_7 {
+                background-color: #CE4571;
+            }
+
+            .modal-body {
+                text-align: center;
+            }
+
+            .modal {
+                min-width: 320px;
+            }
+
+            @media screen and (max-width: 767px) {
+               .weekdayDiv {
+                    margin-right: 15px;
+                    border-radius: 35px;
+                }
+
+                #forecastDyly {
+                    background-color: rgba(0, 0, 0, 0.0001);
+                }
+
+                #tableNowContainer table {
+                    margin-bottom: 0;
+                }
+            }
+
+            @media only screen and (min-width: 768px) and (max-width: 991px) {
+                .weekdayDiv{
+                    min-width: 65px;
+                    padding-top: 25px;
+                    padding-bottom: 25px;
+                    padding-left: 0px;
+                    padding-right: 0px;
+                    font-size: 11px;
+                }
+            }
+
+            @media only screen and (min-width: 992px) and (max-width: 1200px) {
+                .weekdayDiv{
+                    padding-left: 3px;
+                    padding-right: 3px;
+                    font-size: 14px;
+                }
+            }
+
+            /* -------- CSS for Maps -------- */
+            #basicMap {
+                width: 100%;
+                height: 476px;
+                padding: 0px;
+                border: 3px solid #FFFFFF;
+            }
+
+            #mylinks {
+                background: #575757;
+                color: white;
+                z-index:2000;
+                width: 30%;
+                font-size: 1em;
+                text-align: left;
+                position: absolute;
+                bottom: 0.2em;
+                left: 0.2em;
+                padding: 5px;
+                width: 33%;
+                filter:alpha(opacity=90);
+                opacity:0.9;
+                border-radius: 4px;
+            }
+
+            #mylinksRight {
+                background: #575757;
+                color: white;
+                z-index:1000;
+                font-size: 1em;
+                text-align: left;
+                position: absolute;
+                right: 3px;
+                bottom: 0.2em;
+                padding: 5px;
+                width: 400px;
+                filter:alpha(opacity=90);
+                opacity:0.9;
+                border-radius: 4px;
+            }
+
+            #myAnnotRight {
+                background: #575757;
+                color: white;
+                z-index:1000;
+                font-size: 1em;
+                text-align: left;
+                position: absolute;
+                right: 3px;
+                bottom: 40px;
+                padding: 4px;
+                filter:alpha(opacity=90);
+                opacity:0.9;
+                border-radius: 4px;
+            }
+
+            .olControlLayerSwitcher .layersDiv {
+                background-color:#575757 !important;
+                filter:alpha(opacity=90);
+                opacity:0.9;
+                border-radius: 4px;
+                color: white;
+                font-family: sans-serif;
+                font-size: smaller;
+                font-weight: bold;
+            }
+
+            .olControlAttribution {
+                background: #575757;
+                color: white;
+                z-index:1000;
+                font-size: 1em;
+                text-align: left;
+                position: absolute;
+                right: 3px;
+                bottom: 10px;
+                padding: 4px;
+                filter:alpha(opacity=90);
+                opacity:0.9;
+                border-radius: 4px;
+            }
+
+            .olButton {
+              color: white;
+              font-family: arial;
+              display: inline;
+            }
+
+            .olImageLoadError {
+                visibility: hidden !IMPORTANT;
+            }
+        </style>
+    </head>
+    <body>
+        <script>
+            window.fbAsyncInit = function() {
+                FB.init({
+                    appId    : '1508857206106850',
+                    xfbml    : true,
+                    version  : 'v2.5'
+                });
+            };
+            (function(d, s, id){
+                var js, fjs = d.getElementsByTagName(s)[0];
+                if (d.getElementById(id)) {return;}
+                js = d.createElement(s); js.id = id;
+                js.src = "//connect.facebook.net/en_US/sdk.js";
+                fjs.parentNode.insertBefore(js, fjs);
+            }(document, 'script', 'facebook-jssdk'));
+        </script>
+        <div class="container" id="formContainer">
+            <div id="formHeader" align="center">
+                <h1>Forecast Search</h1>
+            </div>
+            <div class="well well-xs well-sm well-md well-lg" id="inputform">
+                <form id="searchForm" role="form" class="form-inline" data-toggle="validate">
+                    <div class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
+                        <div class="row col-md-12 col-lg-12">
+                            <div class="form-group">
+                                <label>Street Address: <span class="labelAsterisk">*</span> </label>
+                                <br>
+                                <input type="text" autofocus name="street_address" class="form-control" placeholder="Enter street address" size="35" data-toggle="tooltip" data-placement="top" title="Please enter street address"/>
+                            </div>
+                            <div class="form-group">
+                                <label>City: <span class="labelAsterisk">*</span> </label>
+                                <br>
+                                <input type="text" name="city_name" class="form-control" placeholder="Enter the city name" data-toggle="tooltip" data-placement="top" title="Please enter city name"/>
+                            </div>
+                            <div class="form-group">
+                                <label>State: <span class="labelAsterisk">*</span> </label>
+                                <br>
+                                <select id="state_Select" class="form-control" name="state_name" data-toggle="tooltip" data-placement="top" title="Please select a state from the dropdownlist">
+                                    <option value="" selected>Select your state</option>
+                                    <option value="AL">Alabama</option>
+                                    <option value="AK">Alaska</option>
+                                    <option value="AZ">Arizona</option>
+                                    <option value="AR">Arkansas</option>
+                                    <option value="CA">California</option>
+                                    <option value="CO">Colorado</option>
+                                    <option value="CT">Connecticut</option>
+                                    <option value="DE">Delaware</option>
+                                    <option value="DC">District Of Columbia</option>
+                                    <option value="FL">Florida</option>
+                                    <option value="GA">Georgia</option>
+                                    <option value="HI">Hawaii</option>
+                                    <option value="ID">Idaho</option>
+                                    <option value="IL">Illinois</option>
+                                    <option value="IN">Indiana</option>
+                                    <option value="IA">Iowa</option>
+                                    <option value="KS">Kansas</option>
+                                    <option value="KY">Kentucky</option>
+                                    <option value="LA">Louisiana</option>
+                                    <option value="ME">Maine</option>
+                                    <option value="MD">Maryland</option>
+                                    <option value="MA">Massachusetts</option>
+                                    <option value="MI">Michigan</option>
+                                    <option value="MN">Minnesota</option>
+                                    <option value="MS">Mississippi</option>
+                                    <option value="MO">Missouri</option>
+                                    <option value="MT">Montana</option>
+                                    <option value="NE">Nebraska</option>
+                                    <option value="NV">Nevada</option>
+                                    <option value="NH">New Hampshire</option>
+                                    <option value="NJ">New Jersey</option>
+                                    <option value="NM">New Mexico</option>
+                                    <option value="NY">New York</option>
+                                    <option value="NC">North Carolina</option>
+                                    <option value="ND">North Dakota</option>
+                                    <option value="OH">Ohio</option>
+                                    <option value="OK">Oklahoma</option>
+                                    <option value="OR">Oregon</option>
+                                    <option value="PA">Pennsylvania</option>
+                                    <option value="RI">Rhode Island</option>
+                                    <option value="SC">South Carolina</option>
+                                    <option value="SD">South Dakota</option>
+                                    <option value="TN">Tennessee</option>
+                                    <option value="TX">Texas</option>
+                                    <option value="UT">Utah</option>
+                                    <option value="VT">Vermont</option>
+                                    <option value="VA">Virginia</option>
+                                    <option value="WA">Washington</option>
+                                    <option value="WV">West Virginia</option>
+                                    <option value="WI">Wisconsin</option>
+                                    <option value="WY">Wyoming</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="degreeGroup">
+                                <label>Degree: <span class="labelAsterisk">*</span> </label>
+                                <br>
+                                <label class="radio-inline"><input type="radio" name="measurement" value="us" id="farRadioBtn" checked/> Fahrenheit</label>
+                                <label class="radio-inline"><input type="radio" name="measurement" value="si" id="celRadioBtn"/> Celcius</label>
+                            </div>
+                            <div class="form-group" id="buttonGroup">
+                                <br>
+                                <button type="submit" class="btn btn-primary"><span class="glyphicon glyphicon-search"></span> Search</button>
+                                <button type="button" class="btn btn-default" onClick="clearForm()"><span class="glyphicon glyphicon-refresh"></span> Clear</button>
+                            </div>
+                        </div>
+                        <div id="disclaimer" class="form-group col-xs-12 col-sm-12 col-md-12 col-lg-12">
+                                Powered by: <a href="http://forecast.io/"><img src="images/forecast_logo.png" alt="forecast.io" width="117" height="50" border="0"></a>
+                        </div>
+                    </div>
+                </form>
+          
+            </div>
+                   <form action="login.php" method="POST">
+            
+        Username: <input name="username" type="text" id="sqlusername"> <br>
+            
+        Password: <input name="password" type="password" id="sqlpassword"> <br>
+            
+        <input name="submit" value="Login" type="submit"> <br>
+            
+        </form>
+ 
+    
+        </div>
+      
+        <div class="container" id="hrContainer">
+            <hr>
+        </div>
+        <div class="container" id="tabContainer">
+            <ul class="nav nav-tabs">
+                <li class="active"><a data-toggle="tab" href="#forecastNw">Right Now</a></li>
+                <li><a data-toggle="tab" href="#forecastHrly" onclick="loadMap()">Next 24 Hours</a></li>
+                <li><a data-toggle="tab" href="#forecastDyly">Next 7 Days</a></li>
+            </ul>
+            <div class="tab-content">
+                <div id="forecastNw" class="tab-pane fade in active">
+                    <div class="row">
+                        <div id="tableNowContainer" class="col-xs-12 col-sm-12 col-md-6">
+                            <div id="tabNwHeader">
+                                <div id="iconNw" class="col-xs-12 col-sm-12 col-md-6">
+                                </div>
+                                <div id="detailNw" class="col-xs-12 col-sm-12 col-md-6">
+                                    <div id="summaryNw">
+                                    </div>
+                                    <div id="tempNw">
+                                    </div>
+                                    <div id="lhTempNw">
+                                    </div>
+                                    <span id="fb_icon">
+                                        <a id="postFacebook" href="#">
+                                            <img src="images/fb_icon.png" alt="Post to Facebook" title="Post to Facebook" width="35" height="35" border="0">
+                                        </a>
+                                    </span>
+                                </div>
+                            </div>
+                            <table class="table">
+                                <tbody>
+                                    <tr class="active">
+                                        <td>Precipitation</td>
+                                        <td id="precipIntensity"></td>
+                                    </tr>
+                                    <tr class="danger">
+                                        <td>Chance of Rain</td>
+                                        <td id="precipProbability"></td>
+                                    </tr>
+                                    <tr class="active">
+                                        <td>Wind Speed</td>
+                                        <td id="windSpeed"></td>
+                                    </tr>
+                                    <tr class="danger">
+                                        <td>Dew Point</td>
+                                        <td id="dewPoint"></td>
+                                    </tr>
+                                    <tr class="active">
+                                        <td>Humidity</td>
+                                        <td id="humidity"></td>
+                                    </tr>
+                                    <tr class="danger">
+                                        <td>Visibility</td>
+                                        <td id="visibility"></td>
+                                    </tr>
+                                    <tr class="active">
+                                        <td>Sunrise</td>
+                                        <td id="sunriseTime"></td>
+                                    </tr>
+                                    <tr class="danger">
+                                        <td>Sunset</td>
+                                        <td id="sunsetTime"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="mapContainer" class="col-xs-12 col-sm-12 col-md-6">
+                            <div id="basicMap" class="olMap"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="forecastHrly" class="tab-pane fade">
+                    <table id="tabHeaderHrly" class="table table-responsive">
+                            <tr id="headerHrly">
+                                <th>Time</th>
+                                <th>Summary</th>
+                                <th>Cloud Cover</th>
+                                <th id="tempMeasure"></th>
+                                <th>View Details</th>
+                            </tr>
+                    </table>
+                    <span id="tabContentHrly">
+                    </span>
+                </div>
+                <div id="forecastDyly" class="tab-pane fade">
+                    <div class="row">
+                        <div id="weekDay_1" class="weekdayDiv col-xs-12 col-sm-offset-2 col-sm-1 col-md-1 col-lg-1" data-toggle="modal" data-target="#forecastModal_1">
+                        </div>
+                        <div class="modal fade" id="forecastModal_1" tabindex="-1" role="dialog" aria-labelledby="forecastModalLabel_1">
+                          <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                              <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                <h4 class="modal-title" id="forecastModalLabel_1"></h4>
+                              </div>
+                              <div id="modalBody_1" class="modal-body">
+                              </div>
+                              <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div id="weekDay_2" class="weekdayDiv col-xs-12 col-sm-1 col-md-1 col-lg-1" data-toggle="modal" data-target="#forecastModal_2">
+                        </div>
+                        <div class="modal fade" id="forecastModal_2" tabindex="-1" role="dialog" aria-labelledby="forecastModalLabel_2">
+                          <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                              <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                <h4 class="modal-title" id="forecastModalLabel_2"></h4>
+                              </div>
+                              <div id="modalBody_2" class="modal-body">
+                              </div>
+                              <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div id="weekDay_3" class="weekdayDiv col-xs-12 col-sm-1 col-md-1 col-lg-1" data-toggle="modal" data-target="#forecastModal_3">
+                        </div>
+                        <div class="modal fade" id="forecastModal_3" tabindex="-1" role="dialog" aria-labelledby="forecastModalLabel_3">
+                          <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                              <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                <h4 class="modal-title" id="forecastModalLabel_3"></h4>
+                              </div>
+                              <div id="modalBody_3" class="modal-body">
+                              </div>
+                              <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div id="weekDay_4" class="weekdayDiv col-xs-12 col-sm-1 col-md-1 col-lg-1" data-toggle="modal" data-target="#forecastModal_4">
+                        </div>
+                        <div class="modal fade" id="forecastModal_4" tabindex="-1" role="dialog" aria-labelledby="forecastModalLabel_4">
+                           <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                              <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                <h4 class="modal-title" id="forecastModalLabel_4"></h4>
+                              </div>
+                              <div id="modalBody_4" class="modal-body">
+                              </div>
+                              <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div id="weekDay_5" class="weekdayDiv col-xs-12 col-sm-1 col-md-1 col-lg-1" data-toggle="modal" data-target="#forecastModal_5">
+                        </div>
+                        <div class="modal fade" id="forecastModal_5" tabindex="-1" role="dialog" aria-labelledby="forecastModalLabel_5">
+                          <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                              <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                <h4 class="modal-title" id="forecastModalLabel_5"></h4>
+                              </div>
+                              <div id="modalBody_5" class="modal-body">
+                              </div>
+                              <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div id="weekDay_6" class="weekdayDiv col-xs-12 col-sm-1 col-md-1 col-lg-1" data-toggle="modal" data-target="#forecastModal_6">
+                        </div>
+                        <div class="modal fade" id="forecastModal_6" tabindex="-1" role="dialog" aria-labelledby="forecastModalLabel_6">
+                          <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                              <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                <h4 class="modal-title" id="forecastModalLabel_6"></h4>
+                              </div>
+                              <div id="modalBody_6" class="modal-body">
+                              </div>
+                              <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div id="weekDay_7" class="weekdayDiv col-xs-12 col-sm-1 col-md-1 col-lg-1" data-toggle="modal" data-target="#forecastModal_7">
+                        </div>
+                        <div class="modal fade" id="forecastModal_7" tabindex="-1" role="dialog" aria-labelledby="forecastModalLabel_7">
+                          <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                              <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                <h4 class="modal-title" id="forecastModalLabel_7"></h4>
+                              </div>
+                              <div id="modalBody_7" class="modal-body">
+                              </div>
+                              <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script type="text/javascript">
+            var facebookObj = {}, map;
+
+            /* Activate for showing tooptips on inputs */
+            /*window.onload = function() {
+                $(function () {
+                    $('[data-toggle="tooltip"]').tooltip()
+                })
+            }*/
+
+            var validator = $("#searchForm").validate({
+                rules: {
+                    street_address: "required",
+                    city_name: "required",
+                    state_name: {
+                        valueNotEquals: ""
+                    }
+                },
+                messages: {
+                    street_address: "Please enter the street address",
+                    city_name: "Please enter the city",
+                    state_name: {
+                        valueNotEquals: "Please select a state"
+                    }
+                },
+                highlight: function(element) {
+                    $(element).closest('.form-group').addClass('has-error');
+                },
+                unhighlight: function(element) {
+                    $(element).closest('.form-group').removeClass('has-error');
+                },
+                errorElement: 'span',
+                errorClass: 'help-block',
+                errorPlacement: function(error, element) {
+                    if(element.parent('.input-group').length) {
+                        error.insertAfter(element.parent());
+                    } else {
+                        error.insertAfter(element);
+                    }
+                },
+                submitHandler: function(form) {
+                    processForm();
+                }
+            });
+
+            $.validator.addMethod("valueNotEquals", function(value, element, arg){
+                return arg != value;
+            }, "Please specify the state");
+
+            $("#postFacebook").click(function () {
+                facebookObj.name = "Current weather in " + document.forms["searchForm"]["city_name"].value + ", " + document.forms["searchForm"]["city_name"].value;
+                facebookObj.link = "http://forecast.io";
+                facebookObj.caption = "Weather information from forcast.io".toUpperCase();
+                facebookObj.picture = "http://webtech.elasticbeanstalk.com/" + $("#iconNw img").attr("src");
+                facebookObj.description = $("#iconNw img").attr("alt") + ", " + $("#tempNw h1 span").html() + $("#tempNw sup").html();
+                FB.ui({
+                    method: 'feed',
+                    name: facebookObj.name,
+                    link: facebookObj.link,
+                    caption: facebookObj.caption,
+                    picture: facebookObj.picture,
+                    description: facebookObj.description
+                }, function(response) {
+                    if(response && response.post_id){
+                        alert("Wuala! Posting was succesfully completed.");
+                    }
+                    else{
+                        alert("Something went wrong. Posting was not completed. Please try again or later.");
+                    }
+                });
+            });
+
+
+            $(document).ready(function(){
+                map = new OpenLayers.Map(
+                    "basicMap",
+                    {
+                        units: 'm',
+                        projection: new OpenLayers.Projection("EPSG:900913"),
+                        displayProjection: new OpenLayers.Projection("EPSG:4326")
+                    }
+                );
+                var mapnik = new OpenLayers.Layer.OSM();
+                var opencyclemap = new OpenLayers.Layer.XYZ(
+                    "opencyclemap",
+                    "http://a.tile3.opencyclemap.org/landscape/${z}/${x}/${y}.png",
+                    {
+                        numZoomLevels: 18,
+                        sphericalMercator: true
+                    }
+                );
+                var city = new OpenLayers.Layer.Vector.OWMWeather(
+                    "Current weather",
+                    {
+                        units : '',
+                        appid: "dced354edc275dd10730af428d00aa0e"
+                    }
+                );
+                var precipitation = new OpenLayers.Layer.XYZ(
+                    "Precipitation forecasts",
+                    "http://${s}.tile.openweathermap.org/map/precipitation/${z}/${x}/${y}.png",
+                    {
+                        numZoomLevels: 19,
+                        isBaseLayer: false,
+                        opacity: 0.3,
+                        sphericalMercator: true
+                    }
+                );
+                var clouds = new OpenLayers.Layer.XYZ(
+                    "Clouds forecasts",
+                    "http://${s}.tile.openweathermap.org/map/clouds/${z}/${x}/${y}.png",
+                    {
+                        numZoomLevels: 19,
+                        isBaseLayer: false,
+                        opacity: 0.4,
+                        sphericalMercator: true
+                    }
+                );
+                clouds.setVisibility(true);
+                map.addLayers([mapnik, opencyclemap, city]);
+                map.addLayer(precipitation);
+                map.addLayer(clouds);
+                var ls = new OpenLayers.Control.LayerSwitcher({'ascending':false});
+                map.addControl(ls);
+                ls.minimizeControl();
+                $("#tabContainer").css("display", "none");
+            });
+        </script>
+        <noscript>
+    </body>
+</html>
